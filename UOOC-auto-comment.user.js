@@ -1,15 +1,15 @@
 // ==UserScript==
 // @name         UOOC自动评论
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  自动在UOOC讨论区发表评论，默认每2分钟发表一次
 // @author       Robin donald
 // @match        https://www.uooc.net.cn/home/learn/index*
-// @match        https://www.uooc.net.cn/home/course/
+// @match        https://www.uooc.net.cn/home/course/*
 // @grant        GM_addStyle
 // @license      Apache License 2.0
-// @downloadURL  https://update.greasyfork.org/scripts/514609/UOOC%20%E8%87%AA%E5%8A%A8%E8%AF%84%E8%AE%BA.user.js
-// @updateURL    https://update.greasyfork.org/scripts/514609/UOOC%20%E8%87%AA%E5%8A%A8%E8%AF%84%E8%AE%BA.meta.js
+// @downloadURL  https://raw.githubusercontent.com/tanxixi1129/-uooc-/main/UOOC-auto-comment.user.js
+// @updateURL    https://raw.githubusercontent.com/tanxixi1129/-uooc-/main/UOOC-auto-comment.user.js
 // ==/UserScript==
 
 (function() {
@@ -29,23 +29,64 @@
         return COMMENTS[Math.floor(Math.random() * COMMENTS.length)];
     }
 
+    // 查找普通文本框或新版富文本编辑器
+    function findCommentEditor() {
+        return document.querySelector([
+            ".w-e-text[contenteditable='true']",
+            "div[contenteditable='true'][role='textbox']",
+            "div[contenteditable='true']",
+            "textarea[placeholder='请输入内容'][ng-model='content']"
+        ].join(', '));
+    }
+
+    // 查找旧版发送按钮或新版“发布回复”按钮
+    function findSendButton() {
+        const oldButton = document.querySelector("button.replay-editor-btn[ng-click='handelReplay()']");
+        if (oldButton) {
+            return oldButton;
+        }
+
+        return Array.from(document.querySelectorAll('button')).find(button => {
+            const label = button.textContent.trim();
+            return label === '发布回复' || label === '发表回复' || label === '发送';
+        });
+    }
+
+    // 同时兼容 textarea 与 contenteditable 富文本编辑器
+    function fillCommentEditor(editor, content) {
+        editor.focus();
+
+        if ('value' in editor) {
+            editor.value = content;
+        } else {
+            editor.innerHTML = '';
+            const paragraph = document.createElement('p');
+            paragraph.textContent = content;
+            editor.appendChild(paragraph);
+        }
+
+        ['input', 'change', 'keyup'].forEach(type => {
+            editor.dispatchEvent(new Event(type, { bubbles: true }));
+        });
+
+        editor.blur();
+    }
+
     // 发表评论
     async function postComment(content) {
         try {
             // 查找评论文本框
-            const commentBox = document.querySelector("textarea[placeholder='请输入内容'][ng-model='content']");
+            const commentBox = findCommentEditor();
             if (!commentBox) {
                 console.log('未找到评论框');
                 return false;
             }
 
             // 填写评论内容
-            commentBox.value = content;
-            // 触发Angular的数据绑定
-            commentBox.dispatchEvent(new Event('input', { bubbles: true }));
+            fillCommentEditor(commentBox, content);
 
             // 查找发送按钮
-            const sendButton = document.querySelector("button.replay-editor-btn[ng-click='handelReplay()']");
+            const sendButton = findSendButton();
             if (!sendButton) {
                 console.log('未找到发送按钮');
                 return false;
