@@ -5,7 +5,7 @@
 // @description  自动在UOOC讨论区发表评论，默认每2分钟发表一次
 // @author       Robin donald
 // @match        https://www.uooc.net.cn/home/learn/index*
-// @match        https://www.uooc.net.cn/home/course/*
+// @match        https://www.uooc.net.cn/home/course/
 // @grant        GM_addStyle
 // @license      Apache License 2.0
 // @downloadURL  https://update.greasyfork.org/scripts/514609/UOOC%20%E8%87%AA%E5%8A%A8%E8%AF%84%E8%AE%BA.user.js
