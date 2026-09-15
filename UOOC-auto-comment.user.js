@@ -1,12 +1,15 @@
 // ==UserScript==
 // @name         UOOC自动评论
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  自动在UOOC讨论区发表评论，默认每2分钟发表一次
 // @author       Robin donald
 // @match        https://www.uooc.net.cn/home/learn/index*
-// @match        https://www.uooc.net.cn/home/course/*
+// @match        *://www.uooc.net.cn/home/course/*
+// @run-at       document-idle
 // @grant        GM_addStyle
+// @grant        GM_registerMenuCommand
+// @noframes
 // @license      Apache License 2.0
 // @downloadURL  https://raw.githubusercontent.com/tanxixi1129/-uooc-/main/UOOC-auto-comment.user.js
 // @updateURL    https://raw.githubusercontent.com/tanxixi1129/-uooc-/main/UOOC-auto-comment.user.js
@@ -14,6 +17,9 @@
 
 (function() {
     'use strict';
+
+    const START_BUTTON_ID = 'uooc-auto-comment-start';
+    let autoCommentRunning = false;
 
     // 预设评论内容
     const COMMENTS = [
@@ -31,25 +37,41 @@
 
     // 查找普通文本框或新版富文本编辑器
     function findCommentEditor() {
-        return document.querySelector([
+        const selectors = [
+            "textarea[placeholder='请输入内容']",
             ".w-e-text[contenteditable='true']",
             "div[contenteditable='true'][role='textbox']",
             "div[contenteditable='true']",
-            "textarea[placeholder='请输入内容'][ng-model='content']"
-        ].join(', '));
+            "textarea[ng-model='content']"
+        ];
+
+        for (const selector of selectors) {
+            const editor = document.querySelector(selector);
+            if (editor) {
+                return editor;
+            }
+        }
+
+        return null;
     }
 
-    // 查找旧版发送按钮或新版“发布回复”按钮
-    function findSendButton() {
+    // 查找旧版发送按钮或新版回复按钮
+    function findSendButton(editor) {
         const oldButton = document.querySelector("button.replay-editor-btn[ng-click='handelReplay()']");
         if (oldButton) {
             return oldButton;
         }
 
-        return Array.from(document.querySelectorAll('button')).find(button => {
-            const label = button.textContent.trim();
-            return label === '发布回复' || label === '发表回复' || label === '发送';
+        const labels = new Set(['回复', '发布回复', '发表回复', '发送']);
+        const findByLabel = root => Array.from(root.querySelectorAll('button')).find(button => {
+            return labels.has(button.textContent.trim());
         });
+
+        const nearbyButton = editor && editor.parentElement
+            ? findByLabel(editor.parentElement)
+            : null;
+
+        return nearbyButton || findByLabel(document);
     }
 
     // 同时兼容 textarea 与 contenteditable 富文本编辑器
@@ -86,7 +108,7 @@
             fillCommentEditor(commentBox, content);
 
             // 查找发送按钮
-            const sendButton = findSendButton();
+            const sendButton = findSendButton(commentBox);
             if (!sendButton) {
                 console.log('未找到发送按钮');
                 return false;
@@ -121,14 +143,33 @@
         }
     }
 
-    // 添加启动按钮
-    function addStartButton() {
+    function startAutoComment(button) {
+        if (autoCommentRunning) {
+            return;
+        }
+
+        autoCommentRunning = true;
+        if (button) {
+            button.disabled = true;
+            button.textContent = '评论中...';
+        }
+        autoComment();
+    }
+
+    // 添加启动按钮；页面路由重绘后会自动补回
+    function ensureStartButton() {
+        if (!document.body || document.getElementById(START_BUTTON_ID)) {
+            return;
+        }
+
         const button = document.createElement('button');
-        button.textContent = '开始自动评论';
+        button.id = START_BUTTON_ID;
+        button.type = 'button';
+        button.textContent = autoCommentRunning ? '评论中...' : '开始自动评论 v1.3';
         button.style.position = 'fixed';
-        button.style.top = '10px';
-        button.style.right = '10px';
-        button.style.zIndex = '9999';
+        button.style.top = '80px';
+        button.style.right = '24px';
+        button.style.zIndex = '2147483647';
         button.style.padding = '8px 16px';
         button.style.backgroundColor = '#4CAF50';
         button.style.color = 'white';
@@ -137,18 +178,43 @@
         button.style.cursor = 'pointer';
 
         button.addEventListener('click', () => {
-            button.disabled = true;
-            button.textContent = '评论中...';
-            autoComment();
+            startAutoComment(button);
         });
 
         document.body.appendChild(button);
     }
 
-    // 等待页面加载完成后添加按钮
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', addStartButton);
-    } else {
-        addStartButton();
+    if (typeof GM_addStyle === 'function') {
+        GM_addStyle(`
+            #${START_BUTTON_ID} {
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                position: fixed !important;
+                top: 80px !important;
+                right: 24px !important;
+                z-index: 2147483647 !important;
+            }
+        `);
     }
+
+    if (typeof GM_registerMenuCommand === 'function') {
+        GM_registerMenuCommand('开始自动评论', () => {
+            startAutoComment(document.getElementById(START_BUTTON_ID));
+        });
+    }
+
+    // 等待页面加载，并持续处理 Angular 路由重绘
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ensureStartButton);
+    } else {
+        ensureStartButton();
+    }
+
+    new MutationObserver(ensureStartButton).observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+    setInterval(ensureStartButton, 2000);
+    console.info(`[UOOC自动评论] v1.3 已加载：${location.href}`);
 })();
